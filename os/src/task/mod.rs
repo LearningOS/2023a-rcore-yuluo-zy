@@ -19,10 +19,9 @@ use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
 use lazy_static::*;
 use switch::__switch;
-pub use task::{TaskControlBlock, TaskStatus, TaskInfo};
+pub use task::{TaskControlBlock,TaskRunnerStatus, TaskStatus, TaskInfo};
 
 pub use context::TaskContext;
-use crate::task::task::TaskRunnerStatus;
 use crate::timer::get_time_ms;
 
 /// The task manager, where all the tasks are managed.
@@ -56,7 +55,7 @@ lazy_static! {
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
-            runner_status = TaskRunnerStatus::default();
+            runner_status: TaskRunnerStatus::default()
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -84,9 +83,9 @@ impl TaskManager {
         let task0 = &mut inner.tasks[0];
         task0.task_status = TaskStatus::Running;
         let next_task_cx_ptr = &task0.task_cx as *const TaskContext;
+        task0.runner_status.start_time = get_time_ms();
         drop(inner);
         let mut _unused = TaskContext::zero_init();
-        task0.runner_status.start_time = get_time_ms();
         // before this, we should drop local variables that must be dropped manually
         unsafe {
             __switch(&mut _unused as *mut TaskContext, next_task_cx_ptr);
@@ -143,24 +142,25 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
-
+    /// update syscall times
     fn update_syscall_times(&self, syscall_id: usize) {
         let mut inner = self.inner.exclusive_access();
-        let current_task = &mut inner.tasks[inner.current_task];
+        let index = inner.current_task;
+        let current_task = &mut inner.tasks[index];
         if syscall_id < MAX_SYSCALL_NUM {
             current_task.runner_status.syscall_times[syscall_id] += 1;
         }
         drop(inner)
     }
-
+    /// update task info
     fn update_task_info(&self, task_info: *mut TaskInfo) {
         let mut inner = self.inner.exclusive_access();
         let current_time = get_time_ms();
-
-        let current_task = &mut inner.tasks[inner.current_task];
+        let index = inner.current_task;
+        let current_task = &mut inner.tasks[index];
         unsafe {
             (*task_info).time = current_time -current_task.runner_status.start_time;
-            (*task_info).syscall_times.clone_from_slice(&*current_task.runner_status.syscall_times);
+            (*task_info).syscall_times.clone_from_slice(&current_task.runner_status.syscall_times);
             (*task_info).status = TaskStatus::Running;
         }
         drop(inner);
@@ -200,10 +200,11 @@ pub fn exit_current_and_run_next() {
     run_next_task();
 }
 
+/// update syscall times
 pub fn update_syscall_times(syscall_id: usize) {
     TASK_MANAGER.update_syscall_times(syscall_id);
 }
-
+/// update task info
 pub fn update_task_info(task_info: *mut TaskInfo){
     TASK_MANAGER.update_task_info(task_info);
 }

@@ -10,15 +10,19 @@ pub struct TaskControlBlock {
     pub task_status: TaskStatus,
     /// The task context
     pub task_cx: TaskContext,
-
+/// rummer status
     pub runner_status: TaskRunnerStatus
 }
-
+/// runner status
+#[derive(Copy, Clone)]
 pub struct TaskRunnerStatus {
+    /// times about syscall
     pub syscall_times: [u32;MAX_SYSCALL_NUM],
+    /// start time
     pub start_time: usize
 }
 
+/// default
 impl Default for TaskRunnerStatus {
     fn default() -> Self {
         Self {
