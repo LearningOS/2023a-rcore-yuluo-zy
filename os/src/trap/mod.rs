@@ -53,7 +53,11 @@ pub fn trap_handler(cx: &mut TrapContext) -> &mut TrapContext {
         Trap::Exception(Exception::UserEnvCall) => {
             // jump to next instruction anyway
             cx.sepc += 4;
-            update_syscall_times(cx.x[17]);
+            // if cx.x[17] !=  64{
+                // println!("-----{}",cx.x[17]);
+                update_syscall_times(cx.x[17]);
+            // }
+
             // get system call return value
             cx.x[10] = syscall(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]) as usize;
         }

@@ -147,8 +147,11 @@ impl TaskManager {
         let mut inner = self.inner.exclusive_access();
         let index = inner.current_task;
         let current_task = &mut inner.tasks[index];
-        if syscall_id < MAX_SYSCALL_NUM {
+        if syscall_id <= MAX_SYSCALL_NUM {
             current_task.runner_status.syscall_times[syscall_id] += 1;
+            // println!("---{} ---{} ___{}",syscall_id,
+            //          current_task.runner_status.syscall_times[syscall_id]
+            // , index)
         }
         drop(inner)
     }
@@ -160,7 +163,13 @@ impl TaskManager {
         let current_task = &mut inner.tasks[index];
         unsafe {
             (*task_info).time = current_time -current_task.runner_status.start_time;
+            // for i in 0..500  {
+            //     println!("{} - {}", i, current_task.runner_status.syscall_times[i]);
+            // }
             (*task_info).syscall_times.clone_from_slice(&current_task.runner_status.syscall_times);
+            // for i in 0..500  {
+            //     println!("{} - {}", i, (*task_info).syscall_times[i]);
+            // }
             (*task_info).status = TaskStatus::Running;
         }
         drop(inner);
