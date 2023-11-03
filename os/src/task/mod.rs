@@ -24,7 +24,7 @@ pub use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
 use crate::config::MAX_SYSCALL_NUM;
-use crate::mm::{VirtAddr, VirtPageNum};
+use crate::mm::{VirtAddr};
 pub use crate::task::task::TaskInfo;
 use crate::timer::get_time_ms;
 
@@ -62,6 +62,7 @@ lazy_static! {
         for i in 0..num_app {
             tasks.push(TaskControlBlock::new(get_app_data(i), i));
         }
+        println!("num_app = {}", num_app);
         TaskManager {
             num_app,
             inner: unsafe {
@@ -188,11 +189,19 @@ impl TaskManager {
         }
         drop(inner);
     }
-
-    pub fn mmap(&self, start: VirtPageNum, end: VirtPageNum, port: usize) {
+/// 狂欢节考核和
+    pub fn mmap(&self, start: VirtAddr, end: VirtAddr, port: usize) -> isize{
     let mut inner = self.inner.exclusive_access();
         let current_task = inner.current_task;
-        inner.tasks[current_task].memory_set
+        inner.tasks[current_task].memory_set.mmap(start, end, port)
+    }
+
+    /// jkhgg
+    pub fn munmap(&self,start: VirtAddr, end: VirtAddr) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let current_task = inner.current_task;
+        println!("111111kjkj");
+        inner.tasks[current_task].memory_set.munmap(start, end)
     }
 }
 
@@ -261,12 +270,12 @@ pub fn mmap(start: usize, len: usize, port: usize) -> isize{
     || !VirtAddr::from(start).aligned() { return -1}
 
     // 转换虚拟页号
-    TASK_MANAGER.mmap(VirtPageNum::from(VirtAddr::from(start)),
-                      VirtPageNum::from(VirtAddr::from(start + len).ceil()), port);
-    0
+    TASK_MANAGER.mmap(VirtAddr::from(start), VirtAddr::from(start + len), port)
 }
 
 /// hjkj
 pub fn munmap(start: usize, len: usize) -> isize{
-
+    if VirtAddr::from(start).aligned() {  return -1}
+    if len == 0 { return 0  }
+    TASK_MANAGER.munmap(start.into(), (start +len).into())
 }

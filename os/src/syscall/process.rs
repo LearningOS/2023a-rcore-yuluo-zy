@@ -6,7 +6,7 @@ use crate::{
     },
 };
 use crate::mm::translated_token;
-use crate::task::{current_user_token, mmap, TaskInfo, update_task_info};
+use crate::task::{current_user_token, mmap, munmap, TaskInfo, update_task_info};
 use crate::timer::get_time_us;
 
 #[repr(C)]
@@ -65,7 +65,7 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
 // YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    -1
+    munmap(_start, _len)
 }
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {

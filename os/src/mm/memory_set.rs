@@ -10,11 +10,12 @@ use crate::config::{
 use crate::sync::UPSafeCell;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
+use alloc::vec;
 use alloc::vec::Vec;
 use core::arch::asm;
 use lazy_static::*;
 use riscv::register::satp;
-use riscv::use_sv32;
+
 
 extern "C" {
     fn stext();
@@ -58,15 +59,83 @@ impl MemorySet {
         start_va: VirtAddr,
         end_va: VirtAddr,
         permission: MapPermission,
-    ) {
+    ) -> isize {
+        for temp in self.areas.iter() {
+            let l = temp.vpn_range.get_start().0 << 12;
+            let r = temp.vpn_range.get_end().0 << 12;
+            if start_va < VirtAddr::from(r)
+                && end_va > VirtAddr::from(l) {
+                return -1;
+            }
+        }
         self.push(
             MapArea::new(start_va, end_va, MapType::Framed, permission),
             None,
         );
+        0
     }
     /// test
-    pub fn mmap(start: VirtPageNum, end: VirtPageNum, port: usize) -> isize {
+    pub fn mmap(&mut self, start: VirtAddr, end: VirtAddr, port: usize) -> isize {
+        let a = MapPermission::from_bits((port < 1) as u8).unwrap();
 
+        self.insert_framed_area(start.into(), end.into(), a.union(MapPermission::U))
+    }
+
+    /// jhhh
+    pub fn munmap(&mut self, start: VirtAddr, end: VirtAddr) -> isize {
+        let start_vpn = start.floor();
+        let end_vpn = end.ceil();
+        let mut x = vec![false; end_vpn.0 - start_vpn.0];
+        println!("ssssskjkj");
+        for area in self.areas.iter_mut() {
+            let l = area.vpn_range.get_start();
+            let r = area.vpn_range.get_end();
+            let start_max = if start_vpn > l { start_vpn } else { l };
+            let end_min = if end_vpn > r { r } else { end_vpn };
+            if start_max < end_min {
+                for item in start_max.0..end_min.0 {
+                    x[item - start_vpn.0] = true;
+                }
+            }
+        };
+        println!("1111lklklkkjkj");
+
+        if x.iter().any(|&i| !i) {
+            println!("lklklkkjkj");
+            return -1;
+        };
+
+        println!("4444");
+
+        let mut unmap_areas = Vec::new();
+        println!("4444");
+        for (index, area) in self.areas.iter_mut().enumerate() {
+            let l = area.vpn_range.get_start();
+            let r = area.vpn_range.get_end();
+            println!("676");
+            if start_vpn <= l && r <= end_vpn {
+                area.unmap(&mut self.page_table);
+                unmap_areas.push(index);
+            }
+
+            else if start_vpn <= l && r > end_vpn {
+                let mut temp = end_vpn;
+                temp.step();
+                area.shrink_to_start(&mut self.page_table, temp);
+            }
+            else if start_vpn < r && end_vpn > r {
+                let mut temp = start_vpn;
+                temp.0 -= 1;
+                area.shrink_to_start(&mut self.page_table, temp);
+            }
+        }
+        println!("5555");
+        unmap_areas.reverse();
+        println!("343333");
+        for unmap_area in unmap_areas.iter_mut() {
+            self.areas.remove(*unmap_area);
+        }
+        0
     }
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         map_area.map(&mut self.page_table);
@@ -253,6 +322,7 @@ impl MemorySet {
         }
     }
 
+
     /// append the area to new_end
     #[allow(unused)]
     pub fn append_to(&mut self, start: VirtAddr, new_end: VirtAddr) -> bool {
@@ -268,6 +338,7 @@ impl MemorySet {
         }
     }
 }
+
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
     vpn_range: VPNRange,
@@ -331,6 +402,13 @@ impl MapArea {
             self.unmap_one(page_table, vpn)
         }
         self.vpn_range = VPNRange::new(self.vpn_range.get_start(), new_end);
+    }
+    /// tiaozheng
+    pub fn shrink_to_start(&mut self, page_table: &mut PageTable, new_start: VirtPageNum) {
+        for vpn in VPNRange::new(self.vpn_range.get_start(), new_start) {
+            self.unmap_one(page_table, vpn)
+        }
+        self.vpn_range = VPNRange::new(new_start, self.vpn_range.get_end());
     }
     #[allow(unused)]
     pub fn append_to(&mut self, page_table: &mut PageTable, new_end: VirtPageNum) {
