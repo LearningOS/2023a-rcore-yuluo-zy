@@ -274,7 +274,7 @@ pub fn mmap(start: usize, len: usize, port: usize) -> isize{
 
 /// hjkj
 pub fn munmap(start: usize, len: usize) -> isize{
-    if !VirtAddr::from(start).aligned() { println!("hhhhh"); return -1}
+    if !VirtAddr::from(start).aligned() { return -1}
     if len == 0 { return 0  }
     TASK_MANAGER.munmap(start.into(), (start +len).into())
 }

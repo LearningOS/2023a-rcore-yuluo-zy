@@ -79,12 +79,12 @@ impl MemorySet {
         if a.is_none() {
             return -1;
         }
-        let a = a.unwrap();
+        let mut  a = a.unwrap();
         if a.is_empty() || a.contains(MapPermission::U) {
             return -1;
         }
-
-        self.insert_framed_area(start.into(), end.into(),       a.union(MapPermission::U))
+        a.set(MapPermission::U, true);
+        self.insert_framed_area(start.into(), end.into(),       a)
     }
 
     /// jhhh
