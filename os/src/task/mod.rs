@@ -23,6 +23,9 @@ use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
+use crate::config::MAX_SYSCALL_NUM;
+pub use crate::task::task::TaskInfo;
+use crate::timer::get_time_ms;
 
 /// The task manager, where all the tasks are managed.
 ///
@@ -80,6 +83,7 @@ impl TaskManager {
         let next_task = &mut inner.tasks[0];
         next_task.task_status = TaskStatus::Running;
         let next_task_cx_ptr = &next_task.task_cx as *const TaskContext;
+        next_task.runner_status.start_time = get_time_ms() / 1000;
         drop(inner);
         let mut _unused = TaskContext::zero_init();
         // before this, we should drop local variables that must be dropped manually
@@ -143,6 +147,9 @@ impl TaskManager {
             inner.current_task = next;
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
+            if inner.tasks[next].runner_status.start_time <= 0 {
+                inner.tasks[next].runner_status.start_time= get_time_ms() / 1000;
+            }
             drop(inner);
             // before this, we should drop local variables that must be dropped manually
             unsafe {
@@ -152,6 +159,33 @@ impl TaskManager {
         } else {
             panic!("All applications completed!");
         }
+    }
+
+
+    /// Get the current 'Running' task's trap contexts.
+    fn update_syscall_times(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let index = inner.current_task;
+        let current_task = &mut inner.tasks[index];
+        if syscall_id < MAX_SYSCALL_NUM {
+            current_task.runner_status.syscall_times[syscall_id] += 1;
+        }
+        drop(inner)
+    }
+
+
+    /// todo
+    fn update_task_info(&self, task_info: *mut TaskInfo) {
+        let mut inner = self.inner.exclusive_access();
+        let current_time = get_time_ms();
+        let index = inner.current_task;
+        let current_task = &mut inner.tasks[index];
+        unsafe {
+            (*task_info).time = current_time -current_task.runner_status.start_time;
+            (*task_info).syscall_times.clone_from_slice(&current_task.runner_status.syscall_times);
+            (*task_info).status = TaskStatus::Running;
+        }
+        drop(inner);
     }
 }
 
@@ -201,4 +235,13 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// rrrr
+pub fn update_syscall_times(syscall_id: usize) {
+    TASK_MANAGER.update_syscall_times(syscall_id);
+}
+/// rrrr
+pub fn update_task_info(task_info: *mut TaskInfo){
+    TASK_MANAGER.update_task_info(task_info);
 }

@@ -1,27 +1,19 @@
 //! Process management syscalls
 use crate::{
-    config::MAX_SYSCALL_NUM,
+
     task::{
-        change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus,
+        change_program_brk, exit_current_and_run_next, suspend_current_and_run_next,
     },
 };
+use crate::mm::translated_token;
+use crate::task::{current_user_token, TaskInfo, update_task_info};
+use crate::timer::get_time_us;
 
 #[repr(C)]
 #[derive(Debug)]
 pub struct TimeVal {
     pub sec: usize,
     pub usec: usize,
-}
-
-/// Task information
-#[allow(dead_code)]
-pub struct TaskInfo {
-    /// Task status in it's life cycle
-    status: TaskStatus,
-    /// The numbers of syscall called by task
-    syscall_times: [u32; MAX_SYSCALL_NUM],
-    /// Total running time of task
-    time: usize,
 }
 
 /// task exits and submit an exit code
@@ -43,7 +35,15 @@ pub fn sys_yield() -> isize {
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
-    -1
+    let us = get_time_us();
+    let _ts_rel = translated_token(current_user_token(), _ts);
+    unsafe {
+        *_ts_rel = TimeVal {
+            sec: us / 1_000_000,
+            usec: us % 1_000_000,
+        };
+    }
+    0
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
@@ -51,7 +51,9 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
 /// HINT: What if [`TaskInfo`] is splitted by two pages ?
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
-    -1
+    let _ti_rel = translated_token(current_user_token(), _ti);
+    update_task_info(_ti_rel);
+    0
 }
 
 // YOUR JOB: Implement mmap.
