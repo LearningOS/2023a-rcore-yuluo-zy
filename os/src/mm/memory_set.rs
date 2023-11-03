@@ -63,8 +63,7 @@ impl MemorySet {
         for temp in self.areas.iter() {
             let l = temp.vpn_range.get_start().0 << 12;
             let r = temp.vpn_range.get_end().0 << 12;
-            if start_va < VirtAddr::from(r)
-                && end_va > VirtAddr::from(l) {
+            if !(start_va.0 >= r || end_va.0 <= l){
                 return -1;
             }
         }
@@ -76,9 +75,16 @@ impl MemorySet {
     }
     /// test
     pub fn mmap(&mut self, start: VirtAddr, end: VirtAddr, port: usize) -> isize {
-        let a = MapPermission::from_bits((port << 1) as u8).unwrap();
+        let a = MapPermission::from_bits((port << 1) as u8);
+        if a.is_none() {
+            return -1;
+        }
+        let a = a.unwrap();
+        if a.is_empty() || a.contains(MapPermission::U) {
+            return -1;
+        }
 
-        self.insert_framed_area(start.into(), end.into(), a.union(MapPermission::U))
+        self.insert_framed_area(start.into(), end.into(),       a.union(MapPermission::U))
     }
 
     /// jhhh
