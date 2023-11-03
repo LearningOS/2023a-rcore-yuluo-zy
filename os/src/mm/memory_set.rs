@@ -14,6 +14,7 @@ use alloc::vec::Vec;
 use core::arch::asm;
 use lazy_static::*;
 use riscv::register::satp;
+use riscv::use_sv32;
 
 extern "C" {
     fn stext();
@@ -62,6 +63,10 @@ impl MemorySet {
             MapArea::new(start_va, end_va, MapType::Framed, permission),
             None,
         );
+    }
+    /// test
+    pub fn mmap(start: VirtPageNum, end: VirtPageNum, port: usize) -> isize {
+
     }
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         map_area.map(&mut self.page_table);

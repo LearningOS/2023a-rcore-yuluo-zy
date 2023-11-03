@@ -24,6 +24,7 @@ pub use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
 use crate::config::MAX_SYSCALL_NUM;
+use crate::mm::{VirtAddr, VirtPageNum};
 pub use crate::task::task::TaskInfo;
 use crate::timer::get_time_ms;
 
@@ -187,6 +188,12 @@ impl TaskManager {
         }
         drop(inner);
     }
+
+    pub fn mmap(&self, start: VirtPageNum, end: VirtPageNum, port: usize) {
+    let mut inner = self.inner.exclusive_access();
+        let current_task = inner.current_task;
+        inner.tasks[current_task].memory_set
+    }
 }
 
 /// Run the first task in task list.
@@ -244,4 +251,22 @@ pub fn update_syscall_times(syscall_id: usize) {
 /// rrrr
 pub fn update_task_info(task_info: *mut TaskInfo){
     TASK_MANAGER.update_task_info(task_info);
+}
+
+/// mmap
+pub fn mmap(start: usize, len: usize, port: usize) -> isize{
+    // 校验
+    if len == 0 { return 0  }
+    if port & !0x7 != 0 || port & 0x7 == 0
+    || !VirtAddr::from(start).aligned() { return -1}
+
+    // 转换虚拟页号
+    TASK_MANAGER.mmap(VirtPageNum::from(VirtAddr::from(start)),
+                      VirtPageNum::from(VirtAddr::from(start + len).ceil()), port);
+    0
+}
+
+/// hjkj
+pub fn munmap(start: usize, len: usize) -> isize{
+
 }
