@@ -200,7 +200,6 @@ impl TaskManager {
     pub fn munmap(&self,start: VirtAddr, end: VirtAddr) -> isize {
         let mut inner = self.inner.exclusive_access();
         let current_task = inner.current_task;
-        println!("111111kjkj");
         inner.tasks[current_task].memory_set.munmap(start, end)
     }
 }
@@ -275,7 +274,7 @@ pub fn mmap(start: usize, len: usize, port: usize) -> isize{
 
 /// hjkj
 pub fn munmap(start: usize, len: usize) -> isize{
-    if VirtAddr::from(start).aligned() {  return -1}
+    if !VirtAddr::from(start).aligned() { println!("hhhhh"); return -1}
     if len == 0 { return 0  }
     TASK_MANAGER.munmap(start.into(), (start +len).into())
 }

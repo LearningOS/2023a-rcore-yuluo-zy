@@ -76,7 +76,7 @@ impl MemorySet {
     }
     /// test
     pub fn mmap(&mut self, start: VirtAddr, end: VirtAddr, port: usize) -> isize {
-        let a = MapPermission::from_bits((port < 1) as u8).unwrap();
+        let a = MapPermission::from_bits((port << 1) as u8).unwrap();
 
         self.insert_framed_area(start.into(), end.into(), a.union(MapPermission::U))
     }
@@ -86,7 +86,6 @@ impl MemorySet {
         let start_vpn = start.floor();
         let end_vpn = end.ceil();
         let mut x = vec![false; end_vpn.0 - start_vpn.0];
-        println!("ssssskjkj");
         for area in self.areas.iter_mut() {
             let l = area.vpn_range.get_start();
             let r = area.vpn_range.get_end();
@@ -98,40 +97,32 @@ impl MemorySet {
                 }
             }
         };
-        println!("1111lklklkkjkj");
 
         if x.iter().any(|&i| !i) {
-            println!("lklklkkjkj");
             return -1;
         };
 
-        println!("4444");
-
         let mut unmap_areas = Vec::new();
-        println!("4444");
         for (index, area) in self.areas.iter_mut().enumerate() {
             let l = area.vpn_range.get_start();
             let r = area.vpn_range.get_end();
-            println!("676");
             if start_vpn <= l && r <= end_vpn {
                 area.unmap(&mut self.page_table);
                 unmap_areas.push(index);
             }
 
-            else if start_vpn <= l && r > end_vpn {
+            else if start_vpn <= l && l < end_vpn {
                 let mut temp = end_vpn;
                 temp.step();
                 area.shrink_to_start(&mut self.page_table, temp);
             }
-            else if start_vpn < r && end_vpn > r {
+            else if start_vpn < r && end_vpn >= r {
                 let mut temp = start_vpn;
                 temp.0 -= 1;
                 area.shrink_to_start(&mut self.page_table, temp);
             }
         }
-        println!("5555");
         unmap_areas.reverse();
-        println!("343333");
         for unmap_area in unmap_areas.iter_mut() {
             self.areas.remove(*unmap_area);
         }
