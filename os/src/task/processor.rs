@@ -129,7 +129,7 @@ pub fn mmap(_start: usize, _len: usize, _port: usize) -> isize {
 
 /// 释放内存
 pub fn munmap(_start: usize, _len: usize) -> isize {
-    if VirtAddr::from(_start).aligned() {  return -1}
+    if !VirtAddr::from(_start).aligned() {  return -1}
     if _len == 0 { return 0  }
     let task = current_task().unwrap();
     let x = task
