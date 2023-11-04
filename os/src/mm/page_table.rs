@@ -4,7 +4,6 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
-
 bitflags! {
     /// page table entry flags
     pub struct PTEFlags: u8 {
@@ -182,6 +181,15 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
     }
     v
 }
+/// todo
+pub fn translated_token<T>(token: usize, ptr: *mut T) -> *mut T {
+    let _ptr = ptr as usize;
+    let page_item = PageTable::from_token(token);
+    // VirtAddr::from(ptr).floor();
+    let pda: PhysAddr = page_item.translate(VirtAddr::from(_ptr).floor()).unwrap().ppn().into();
+    ( <PhysAddr as Into<usize>>::into(pda)  + VirtAddr::from(_ptr).page_offset()) as *mut T
+}
+
 
 /// Translate&Copy a ptr[u8] array end with `\0` to a `String` Vec through page table
 pub fn translated_str(token: usize, ptr: *const u8) -> String {

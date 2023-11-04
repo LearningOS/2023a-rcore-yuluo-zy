@@ -11,6 +11,8 @@ use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use lazy_static::*;
+use crate::config::BIG_STRIDE;
+use crate::mm::VirtAddr;
 
 /// Processor management structure
 pub struct Processor {
@@ -61,6 +63,7 @@ pub fn run_tasks() {
             let mut task_inner = task.inner_exclusive_access();
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
             task_inner.task_status = TaskStatus::Running;
+            task_inner.stride += BIG_STRIDE / task_inner.priority as usize;
             // release coming task_inner manually
             drop(task_inner);
             // release coming task TCB manually
@@ -108,4 +111,30 @@ pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
     unsafe {
         __switch(switched_task_cx_ptr, idle_task_cx_ptr);
     }
+}
+
+
+/// 为当前任务申请内存
+pub fn mmap(_start: usize, _len: usize, _port: usize) -> isize {
+    if _len == 0 { return 0  }
+    if _port & !0x7 != 0 || _port & 0x7 == 0
+        || !VirtAddr::from(_start).aligned() { return -1}
+    let task = current_task().unwrap();
+    let x = task
+        .inner_exclusive_access()
+        .memory_set
+        .mmap(VirtAddr::from(_start), VirtAddr::from(_start + _len), _port);
+    x
+}
+
+/// 释放内存
+pub fn munmap(_start: usize, _len: usize) -> isize {
+    if VirtAddr::from(_start).aligned() {  return -1}
+    if _len == 0 { return 0  }
+    let task = current_task().unwrap();
+    let x = task
+        .inner_exclusive_access()
+        .memory_set
+        .munmap(_start.into(), (_start +_len).into());
+    x
 }

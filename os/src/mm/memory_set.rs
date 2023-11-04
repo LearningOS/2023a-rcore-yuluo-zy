@@ -3,10 +3,13 @@ use super::{frame_alloc, FrameTracker};
 use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
-use crate::config::{MEMORY_END, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT_BASE, USER_STACK_SIZE};
+use crate::config::{
+    KERNEL_STACK_SIZE, MEMORY_END, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT_BASE, USER_STACK_SIZE,
+};
 use crate::sync::UPSafeCell;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
+use alloc::vec;
 use alloc::vec::Vec;
 use core::arch::asm;
 use lazy_static::*;
@@ -54,11 +57,80 @@ impl MemorySet {
         start_va: VirtAddr,
         end_va: VirtAddr,
         permission: MapPermission,
-    ) {
+    ) -> isize {
+        for temp in self.areas.iter() {
+            let l = temp.vpn_range.get_start().0 << 12;
+            let r = temp.vpn_range.get_end().0 << 12;
+            if !(start_va.0 >= r || end_va.0 <= l){
+                return -1;
+            }
+        }
         self.push(
             MapArea::new(start_va, end_va, MapType::Framed, permission),
             None,
         );
+        0
+    }
+    /// test
+    pub fn mmap(&mut self, start: VirtAddr, end: VirtAddr, port: usize) -> isize {
+        let a = MapPermission::from_bits((port << 1) as u8);
+        if a.is_none() {
+            return -1;
+        }
+        let mut  a = a.unwrap();
+        if a.is_empty() || a.contains(MapPermission::U) {
+            return -1;
+        }
+        a.set(MapPermission::U, true);
+        self.insert_framed_area(start.into(), end.into(),       a)
+    }
+
+    /// jhhh
+    pub fn munmap(&mut self, start: VirtAddr, end: VirtAddr) -> isize {
+        let start_vpn = start.floor();
+        let end_vpn = end.ceil();
+        let mut x = vec![false; end_vpn.0 - start_vpn.0];
+        for area in self.areas.iter_mut() {
+            let l = area.vpn_range.get_start();
+            let r = area.vpn_range.get_end();
+            let start_max = if start_vpn > l { start_vpn } else { l };
+            let end_min = if end_vpn > r { r } else { end_vpn };
+            if start_max < end_min {
+                for item in start_max.0..end_min.0 {
+                    x[item - start_vpn.0] = true;
+                }
+            }
+        };
+
+        if x.iter().any(|&i| !i) {
+            return -1;
+        };
+
+        let mut unmap_areas = Vec::new();
+        for (index, area) in self.areas.iter_mut().enumerate() {
+            let l = area.vpn_range.get_start();
+            let r = area.vpn_range.get_end();
+            if start_vpn <= l && r <= end_vpn {
+                area.unmap(&mut self.page_table);
+                unmap_areas.push(index);
+            }
+
+            else if start_vpn <= l && l < end_vpn {
+                let mut temp = end_vpn;
+                temp.step();
+                area.shrink_to_start(&mut self.page_table, temp);
+            }
+            else if start_vpn < r && end_vpn >= r {
+                let mut temp = start_vpn;
+                temp.0 -= 1;
+                area.shrink_to_start(&mut self.page_table, temp);
+            }
+        }
+        unmap_areas.reverse();
+        for unmap_area in unmap_areas.iter_mut() {
+            self.areas.remove(*unmap_area);
+        }
+        0
     }
     /// remove a area
     pub fn remove_area_with_start_vpn(&mut self, start_vpn: VirtPageNum) {
@@ -371,6 +443,13 @@ impl MapArea {
         }
         self.vpn_range = VPNRange::new(self.vpn_range.get_start(), new_end);
     }
+    /// tiaozheng
+    pub fn shrink_to_start(&mut self, page_table: &mut PageTable, new_start: VirtPageNum) {
+        for vpn in VPNRange::new(self.vpn_range.get_start(), new_start) {
+            self.unmap_one(page_table, vpn)
+        }
+        self.vpn_range = VPNRange::new(new_start, self.vpn_range.get_end());
+    }
     #[allow(unused)]
     pub fn append_to(&mut self, page_table: &mut PageTable, new_end: VirtPageNum) {
         for vpn in VPNRange::new(self.vpn_range.get_end(), new_end) {
@@ -421,6 +500,13 @@ bitflags! {
         ///Accessible in U mode
         const U = 1 << 4;
     }
+}
+
+/// Return (bottom, top) of a kernel stack in kernel space.
+pub fn kernel_stack_position(app_id: usize) -> (usize, usize) {
+    let top = TRAMPOLINE - app_id * (KERNEL_STACK_SIZE + PAGE_SIZE);
+    let bottom = top - KERNEL_STACK_SIZE;
+    (bottom, top)
 }
 
 /// remap test in kernel space
